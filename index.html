@@ -4,13 +4,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Where’s Dev?</title>
+  <title>Where Dev - The Game</title>
   <style>
     :root {
       --bg: #0a0a0b;
       --fg: #e8e8ea;
       --muted: #9aa0a6;
       --accent: #1fd57c;
+      --gold: #ffcf40;
     }
 
     html,
@@ -47,6 +48,13 @@
       opacity: .2
     }
 
+    .chip {
+      border: 1px solid #2a2f36;
+      border-radius: 10px;
+      padding: 4px 8px;
+      color: var(--muted)
+    }
+
     button {
       background: #111316;
       color: #e8e8ea;
@@ -76,6 +84,108 @@
       color: var(--muted)
     }
 
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .6);
+      z-index: 6
+    }
+
+    .modal .card {
+      background: #0f1113;
+      border: 1px solid #22262b;
+      border-radius: 12px;
+      padding: 16px;
+      max-width: 520px;
+      width: 92%;
+      max-height: 86vh;
+      overflow: auto
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px
+    }
+
+    .cell {
+      border: 1px solid #2a2f36;
+      border-radius: 10px;
+      padding: 8px
+    }
+
+    .cell.locked {
+      opacity: .45;
+      filter: saturate(.25)
+    }
+
+    .legend {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      margin-top: 6px
+    }
+
+    .legend i {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      margin-right: 4px
+    }
+
+    .rare i {
+      background: #c770ff
+    }
+
+    .uncommon i {
+      background: #58b2ff
+    }
+
+    .common i {
+      background: #7bdc86
+    }
+
+    .gold-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #594514;
+      background: linear-gradient(180deg, #2a2210, #171307);
+      color: #ffd86b;
+      padding: 4px 8px;
+      border-radius: 10px
+    }
+
+    /* DEV popup */
+    .devpop {
+      position: fixed;
+      left: 50%;
+      top: 500px;
+      transform: translateX(-50%);
+      z-index: 7;
+      background: rgba(15, 16, 18, .92);
+      color: #fff;
+      border: 1px solid #2b3037;
+      border-radius: 12px;
+      padding: 10px 14px;
+      max-width: min(92vw, 680px);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, .35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s ease;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .devpop.show {
+      opacity: 1;
+    }
+
     @media (max-width:700px) {
       .hud {
         inset: 8px auto auto 8px;
@@ -85,6 +195,14 @@
 
       button {
         padding: 6px 8px
+      }
+
+      .grid {
+        grid-template-columns: 1fr
+      }
+
+      .devpop {
+        font-size: 13px
       }
     }
   </style>
@@ -97,13 +215,44 @@
     <div>Last: <strong id="last">—</strong></div>
     <span class="sep">|</span>
     <div>Best: <strong id="best">—</strong></div>
-    <form>
-  <button formaction="https://pump.fun/coin/2u1FWEujybEeARTUwgtk57B1inpMwdiDk1TqTzW8pump">BUY $DEV</button>
-</form>
+    <span class="sep">|</span>
+    <div>Score: <strong id="score">0</strong> <span id="mult" style="opacity:.8">(x1.0)</span></div>
+    <span class="sep">|</span>
+    <div class="chip">Streak: <span id="streak">0</span>d</div>
+    <div class="chip">RugBook: <span id="bookCount">0</span>/<span id="bookTotal">0</span></div>
+    <div id="bountyChip" class="gold-badge" style="display:none"><svg width="12" height="12" viewBox="0 0 24 24"
+        fill="none">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.88L18.18 22 12 18.56 5.82 22 7 14.15l-5-4.88 6.91-1.01L12 2z"
+          stroke="#ffd86b" />
+      </svg> Bounty Found</div>
+    <button id="share">Share</button>
+    <button id="bookBtn">Rug Book</button>
     <button id="reset">Reset</button>
+    <form>
+      <button formaction="https://pump.fun/">BUY $WHEREDEV</button>
+    </form>
   </div>
+
   <canvas id="canvas"></canvas>
-  <div class="notice">Tip: Only dev is green, as always.
+  <div class="notice" id="notice">Find the green dev. Tip: he holds a bag. Today’s seed: <span id="seedtxt">—</span></div>
+
+  <!-- DEV popup (replaces DEV speech bubble) -->
+  <div id="devPop" class="devpop" role="status" aria-live="polite"></div>
+
+  <!-- Rug Book Modal -->
+  <div class="modal" id="bookModal">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <h3 style="margin:0;font-size:14px;color:var(--accent)">Rug Book</h3>
+        <button id="closeBook">Close</button>
+      </div>
+      <div class="legend">
+        <span class="common"><i></i>Common</span>
+        <span class="uncommon"><i></i>Uncommon</span>
+        <span class="rare"><i></i>Rare</span>
+      </div>
+      <div id="bookGrid" class="grid" style="margin-top:10px"></div>
+    </div>
   </div>
 
   <script>
@@ -114,42 +263,58 @@
         npcRed: '#c23333', npcRedDark: '#7a1e1e', npcBlack: '#1f2023', npcBlackDark: '#0f1012',
         fieldA: '#124521', fieldB: '#165a2a', fieldC: '#1b6f35',
         treeLeafA: '#1b5c2a', treeLeafB: '#1f6c33', trunk: '#5c4026',
-        speech: '#0f1012', speechEdge: '#2b3037', shadow: 'rgba(0,0,0,.25)'
+        speech: '#0f1012', speechEdge: '#2b3037', shadow: 'rgba(0,0,0,.25)',
+        gold: '#ffcf40', goldShade: '#c9a32b'
       };
+
+      // ===== World arrays (declare early to avoid TDZ) =====
+      let solids = [];  // blocking rectangles (tree trunks)
+      let trees = [];  // canopy blobs
+
+      // ===== Daily seed & streak =====
+      const today = new Date();
+      const dayKey = today.toISOString().slice(0, 10);
+      document.getElementById('seedtxt').textContent = dayKey;
+
+      const SAVEKEY = 'wd_save_v2';
+      let save = JSON.parse(localStorage.getItem(SAVEKEY) || '{}');
+      save.badges = save.badges || {};
+      save.decoyClicks = save.decoyClicks || 0;
+      save.book = save.book || {}; // collected excuses by id
+      save.meta = save.meta || {}; // streaks, lastPlayed, bountyFoundByDay
+      save.meta.bounty = save.meta.bounty || {};
+
+      // streak calc
+      const lastPlayed = save.meta.lastPlayed ? new Date(save.meta.lastPlayed) : null;
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      if (!lastPlayed) { save.meta.streak = 1; }
+      else {
+        const diff = Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - Date.UTC(lastPlayed.getFullYear(), lastPlayed.getMonth(), lastPlayed.getDate())) / oneDayMs);
+        if (diff === 1) save.meta.streak = (save.meta.streak || 0) + 1;
+        else if (diff > 1) save.meta.streak = 1;
+      }
+      save.meta.lastPlayed = dayKey;
+      persist();
+
+      // ===== Seeded PRNG =====
+      function murmurHash32(str) { let h = 0x9747b28c | 0; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; } return h >>> 0; }
+      let seed = (murmurHash32(dayKey) ^ (murmurHash32(location.hostname) << 1)) >>> 0;
+      function rng() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 0xffffffff; }
+      function randRange(a, b) { return a + rng() * (b - a); }
 
       // ===== Canvas setup =====
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
-      const DPR = Math.max(1, Math.floor(devicePixelRatio || 1));
+      const DPR = Math.min(2, Math.max(1, Math.floor(devicePixelRatio || 1)));
+      function resize() { const w = canvas.clientWidth = window.innerWidth; const h = canvas.clientHeight = window.innerHeight; canvas.width = w * DPR; canvas.height = h * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); buildWorld(); spawnDev(); spawnCrowd(); buildDecoys(); cacheField(); }
+      let resizeTimer = null; window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(resize, 100); });
 
-      function resize() {
-        const w = canvas.clientWidth = window.innerWidth;
-        const h = canvas.clientHeight = window.innerHeight;
-        canvas.width = w * DPR; canvas.height = h * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-        buildWorld();
-        spawnDev();
-        spawnCrowd();
-      }
-      window.addEventListener('resize', resize);
-
-      // ===== RNG (seeded) =====
-      let seed = (crypto.getRandomValues(new Uint32Array(1))[0] >>> 0) || 0x12345678;
-      function rng() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 0xffffffff; }
-
-      // Lightweight value-noise for textures
-      const NGRID = 128;
-      const noise = new Float32Array((NGRID + 1) * (NGRID + 1)).map(() => 0);
-      for (let i = 0; i < noise.length; i++) { noise[i] = rng(); }
-      function vnoise(x, y) {
-        const xi = Math.floor(x), yi = Math.floor(y);
-        const xf = x - xi, yf = y - yi;
-        function g(ix, iy) { const i = ((ix & (NGRID)) + (iy & (NGRID)) * (NGRID + 1)); return noise[i]; }
-        const n00 = g(xi, yi), n10 = g(xi + 1, yi), n01 = g(xi, yi + 1), n11 = g(xi + 1, yi + 1);
-        const nx0 = n00 * (1 - xf) + n10 * xf; const nx1 = n01 * (1 - xf) + n11 * xf; return nx0 * (1 - yf) + nx1 * yf;
-      }
-      function fBm(x, y, octs = 3) {
-        let amp = 1, freq = 1, sum = 0, norm = 0; for (let i = 0; i < octs; i++) { sum += amp * vnoise(x * freq, y * freq); norm += amp; amp *= 0.5; freq *= 2; } return sum / norm;
-      }
+      // ===== Textures (offscreen grass) =====
+      const NGRID = 128; const noise = new Float32Array((NGRID + 1) * (NGRID + 1)); for (let i = 0; i < noise.length; i++) noise[i] = rng();
+      function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y); const xf = x - xi, yf = y - yi; function g(ix, iy) { const i = ((ix & (NGRID)) + (iy & (NGRID)) * (NGRID + 1)); return noise[i]; } const n00 = g(xi, yi), n10 = g(xi + 1, yi), n01 = g(xi, yi + 1), n11 = g(xi + 1, yi + 1); const nx0 = n00 * (1 - xf) + n10 * xf; const nx1 = n01 * (1 - xf) + n11 * xf; return nx0 * (1 - yf) + nx1 * yf; }
+      function fBm(x, y, octs = 3) { let amp = 1, freq = 1, sum = 0, norm = 0; for (let i = 0; i < octs; i++) { sum += amp * vnoise(x * freq, y * freq); norm += amp; amp *= .5; freq *= 2; } return sum / norm; }
+      let fieldCache = null; function cacheField() { const W = canvas.clientWidth, H = canvas.clientHeight; const step = 6; const off = document.createElement('canvas'); off.width = W; off.height = H; const c = off.getContext('2d'); const a = hexToRgb(P.fieldA), b = hexToRgb(P.fieldB), c1 = hexToRgb(P.fieldC); for (let y = 0; y < H; y += step) { for (let x = 0; x < W; x += step) { const n = fBm(x / 90, y / 90, 4); const m = (Math.sin((x + y) / 140) + 1) / 2; const ab = [lerp(a[0], b[0], n), lerp(a[1], b[1], n), lerp(a[2], b[2], n)]; const bc = [lerp(b[0], c1[0], n), lerp(b[1], c1[1], n), lerp(b[2], c1[2], n)]; const col = m < .5 ? ab : bc; c.fillStyle = rgbToHex(col[0], col[1], col[2]); c.fillRect(x, y, step, step); } } fieldCache = off; }
+      function lerp(a, b, t) { return a + (b - a) * t; } function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; } function rgbToHex(r, g, b) { return '#' + [r, g, b].map(v => ('0' + (v | 0).toString(16)).slice(-2)).join(''); }
 
       // ===== Helpers =====
       function rect(x, y, w, h, fill) { ctx.fillStyle = fill; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
@@ -157,227 +322,208 @@
 
       // ===== Actors =====
       const DEV_W = 20, DEV_H = 24; const NPC_W = 18, NPC_H = 22;
-      let dev = { x: 80, y: 80, w: DEV_W, h: DEV_H, vx: 0, vy: 0, dir: 1, frame: 0, nextF: 0, hiding: true, spawnedAt: performance.now(), say: '' };
-      let npcs = []; let finds = 0, best = null, last = null;
+      let dev = { x: 80, y: 80, w: DEV_W, h: DEV_H, vx: 0, vy: 0, dir: 1, frame: 0, nextF: 0, hiding: true, spawnedAt: performance.now(), say: '', bounty: false };
+      let npcs = []; let decoys = [];
 
-      // NEW: persistent bubble anchor
-      let bubblePos = null; // {x, y} when dev starts yelling
+      // ===== Game state =====
+      let finds = 0, best = null, last = null, score = 0, streakComb = 0, mult = 1.0;
+      let penaltyAcc = 0; let misclicksRound = 0; let bubblePos = null; let spawnsSinceStart = 0;
 
-      // ===== UI =====
+      // ===== HUD =====
       const findsEl = document.getElementById('finds');
       const lastEl = document.getElementById('last');
       const bestEl = document.getElementById('best');
-      document.getElementById('reset').onclick = () => { finds = 0; best = null; last = null; updateHUD(); spawnDev(); spawnCrowd(); };
-      function updateHUD() { findsEl.textContent = String(finds); lastEl.textContent = last == null ? '—' : formatMs(last); bestEl.textContent = best == null ? '—' : formatMs(best); }
+      const scoreEl = document.getElementById('score');
+      const multEl = document.getElementById('mult');
+      const streakEl = document.getElementById('streak');
+      const bookCountEl = document.getElementById('bookCount');
+      const bookTotalEl = document.getElementById('bookTotal');
+      const bountyChip = document.getElementById('bountyChip');
+      const devPopEl = document.getElementById('devPop');
+      let devPopTimer = null;
+
+      document.getElementById('reset').onclick = hardReset;
+      document.getElementById('share').onclick = doShare;
+      document.getElementById('bookBtn').onclick = openBook;
+      document.getElementById('closeBook').onclick = closeBook;
+
+      function updateHUD() { findsEl.textContent = String(finds); lastEl.textContent = last == null ? '—' : formatMs(last); bestEl.textContent = best == null ? '—' : formatMs(best); scoreEl.textContent = String(score | 0); multEl.textContent = `(x${mult.toFixed(1)})`; streakEl.textContent = save.meta.streak || 0; const c = Object.keys(save.book).length; bookCountEl.textContent = String(c); bookTotalEl.textContent = String(RUG_LINES.length); bountyChip.style.display = save.meta.bounty[dayKey] ? 'inline-flex' : 'none'; }
       function formatMs(ms) { const s = ms / 1000; return s < 10 ? s.toFixed(2) + 's' : s < 60 ? s.toFixed(1) + 's' : (Math.floor(s / 60) + 'm ' + (s % 60).toFixed(0) + 's'); }
 
       // ===== World =====
-      let solids = []; // rectangular blockers
-      let trees = [];  // canopy blobs for background
-      // REMOVED ponds entirely
-
-      function buildWorld() {
-        solids.length = 0; trees.length = 0;
-        const W = canvas.clientWidth, H = canvas.clientHeight;
-
-        // Tree clusters with trunks as solids + canopy shapes for background
-        const clusters = Math.max(6, Math.floor((W * H) / 120000));
-        for (let i = 0; i < clusters; i++) {
-          const cx = 40 + rng() * (W - 80); const cy = 40 + rng() * (H - 80);
-          const n = 3 + (rng() * 4) | 0;
-          let canopy = [];
-          for (let k = 0; k < n; k++) {
-            const tx = cx + rng() * 60 - 30, ty = cy + rng() * 40 - 20;
-            solids.push({ x: tx - 4, y: ty - 2, w: 8, h: 10, tree: true });
-            canopy.push({ x: tx + rng() * 10 - 5, y: ty + rng() * 8 - 4, r: 16 + rng() * 14 });
-          }
-          trees.push(canopy);
-        }
-
-        // NOTE: No pond generation; also no pond solids.
-      }
+      function buildWorld() { solids.length = 0; trees.length = 0; const W = canvas.clientWidth, H = canvas.clientHeight; const clusters = Math.max(6, Math.floor((W * H) / 120000)); for (let i = 0; i < clusters; i++) { const cx = 40 + rng() * (W - 80); const cy = 40 + rng() * (H - 80); const n = 3 + (rng() * 4 | 0); let canopy = []; for (let k = 0; k < n; k++) { const tx = cx + randRange(-30, 30), ty = cy + randRange(-20, 20); solids.push({ x: tx - 4, y: ty - 2, w: 8, h: 10, tree: true }); canopy.push({ x: tx + randRange(-5, 5), y: ty + randRange(-4, 4), r: 16 + randRange(0, 14) }); } trees.push(canopy); } }
 
       // ===== Spawning =====
-      function spawnDev() {
-        for (let tries = 0; tries < 250; tries++) {
-          const x = rng() * (canvas.clientWidth - DEV_W - 20) + 10;
-          const y = rng() * (canvas.clientHeight - DEV_H - 20) + 10;
-          const rectA = { x, y, w: DEV_W, h: DEV_H };
-          if (!solids.some(s => rectsOverlap(rectA, s))) {
-            dev.x = x; dev.y = y; dev.vx = 0; dev.vy = 0; dev.dir = rng() < 0.5 ? -1 : 1; dev.frame = 0; dev.hiding = true; dev.say = ''; dev.spawnedAt = performance.now();
-            bubblePos = null; // reset bubble anchor on new spawn
-            return;
-          }
-        }
-      }
-
-      function spawnCrowd() {
-        npcs.length = 0; const N = Math.min(120, 24 + finds * 6);
-        for (let i = 0; i < N; i++) {
-          let x, y, rectA, tries = 0; do {
-            x = rng() * (canvas.clientWidth - NPC_W - 20) + 10;
-            y = rng() * (canvas.clientHeight - NPC_H - 20) + 10;
-            rectA = { x, y, w: NPC_W, h: NPC_H }; tries++;
-          } while (tries < 120 && solids.some(s => rectsOverlap(rectA, s)));
-          const isRed = (rng() < 0.5);
-          const jacket = isRed ? P.npcRed : P.npcBlack;
-          const pants = isRed ? P.npcRedDark : P.npcBlackDark;
-          npcs.push({ x, y, w: NPC_W, h: NPC_H, dir: rng() < 0.5 ? -1 : 1, frame: (rng() * 3) | 0, nextF: 0, vx: (rng() < 0.5 ? -1 : 1) * (24 + rng() * 40), vy: (rng() < 0.5 ? -1 : 1) * (18 + rng() * 32), jacket, pants });
-        }
-      }
+      function freeRect(w, h) { for (let tries = 0; tries < 250; tries++) { const x = randRange(10, canvas.clientWidth - w - 10); const y = randRange(10, canvas.clientHeight - h - 10); const r = { x, y, w, h }; if (!solids.some(s => rectsOverlap(r, s))) return r; } return { x: 80, y: 80, w, h }; }
+      function spawnDev() { const r = freeRect(DEV_W, DEV_H); spawnsSinceStart++; const shouldBounty = !save.meta.bounty[dayKey] && (!dev.bounty) && (spawnsSinceStart >= 8 || rng() < 0.28); Object.assign(dev, { x: r.x, y: r.y, vx: 0, vy: 0, dir: rng() < .5 ? -1 : 1, frame: 0, nextF: 0, hiding: true, say: '', spawnedAt: performance.now(), bounty: shouldBounty }); penaltyAcc = 0; misclicksRound = 0; bubblePos = null; }
+      function spawnCrowd() { npcs.length = 0; const N = Math.min(120, 24 + finds * 6); for (let i = 0; i < N; i++) { const r = freeRect(NPC_W, NPC_H); const isRed = rng() < .5; npcs.push({ x: r.x, y: r.y, w: NPC_W, h: NPC_H, dir: rng() < .5 ? -1 : 1, frame: (rng() * 3) | 0, nextF: 0, vx: (rng() < .5 ? -1 : 1) * (24 + rng() * 40), vy: (rng() < .5 ? -1 : 1) * (18 + rng() * 32), jacket: isRed ? P.npcRed : P.npcBlack, pants: isRed ? P.npcRedDark : P.npcBlackDark, say: '', sayT: 0, panicT: 0 }); } }
+      function buildDecoys() { decoys.length = 0; const D = Math.min(3, Math.floor(finds / 3) + 1); for (let i = 0; i < D; i++) { const r = freeRect(DEV_W, DEV_H); decoys.push({ x: r.x, y: r.y, w: DEV_W, h: DEV_H, frame: (rng() * 3) | 0, dir: rng() < .5 ? -1 : 1, nextF: 0 }); } }
 
       // ===== Rendering =====
-      function drawFieldTexture() {
-        const W = canvas.clientWidth, H = canvas.clientHeight;
-        const step = 6; // balance detail vs perf
-        for (let y = 0; y < H; y += step) {
-          for (let x = 0; x < W; x += step) {
-            const n = fBm(x / 90, y / 90, 4);
-            const mix = n;
-            function lerp(a, b, t) { return a + (b - a) * t; }
-            function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-            function rgbToHex(r, g, b) { return '#' + [r, g, b].map(v => ('0' + (v | 0).toString(16)).slice(-2)).join(''); }
-            const a = hexToRgb(P.fieldA), b = hexToRgb(P.fieldB), c = hexToRgb(P.fieldC);
-            const ab = [lerp(a[0], b[0], mix), lerp(a[1], b[1], mix), lerp(a[2], b[2], mix)];
-            const bc = [lerp(b[0], c[0], mix), lerp(b[1], c[1], mix), lerp(b[2], c[2], mix)];
-            const m = (Math.sin((x + y) / 140) + 1) / 2; // banding
-            const col = m < 0.5 ? ab : bc;
-            rect(x, y, step, step, rgbToHex(col[0], col[1], col[2]));
-          }
-        }
-      }
+      function drawTrees() { for (const canopy of trees) { for (const leaf of canopy) { const { x, y, r } = leaf; const g = ctx.createRadialGradient(x, y, r * .2, x + 2, y + 1, r); g.addColorStop(0, P.treeLeafB); g.addColorStop(1, P.treeLeafA); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); } } for (const s of solids) { if (s.tree) { rect(s.x, s.y, s.w, s.h, P.trunk); } } }
+      function drawDev(px, py, frame = 0, flip = false) { const ox = px | 0, oy = py | 0; ctx.save(); if (flip) { ctx.translate(ox + DEV_W, oy); ctx.scale(-1, 1); } else ctx.translate(ox, oy); rect(2, DEV_H - 3, 16, 2, P.shadow); const hoodCol = dev.bounty ? P.gold : P.devHood; const hoodShade = dev.bounty ? P.goldShade : P.devShade; rect(4, 6, 12, 9, hoodCol); rect(4, 10, 12, 1, hoodShade); rect(7, 7, 6, 4, P.devSkin); rect(7, 6, 6, 1, P.hair); rect(8, 8, 1, 1, P.eye); rect(11, 8, 1, 1, P.eye); if (((Date.now() / 800 | 0) % 3) !== 0) rect(9, 10, 2, 1, P.eye); if (frame === 0) { rect(6, 14, 3, 7, P.jean); rect(9, 14, 3, 7, P.jean); } else if (frame === 1) { rect(5, 14, 3, 7, P.jean); rect(10, 14, 3, 7, P.jean); } else { rect(7, 14, 3, 7, P.jean); rect(9, 14, 3, 7, P.jean); } rect(6, 21, 3, 1, P.shoe); rect(9, 21, 3, 1, P.shoe); rect(2, 13, 4, 5, P.bag); rect(2, 18, 4, 1, P.bagEdge); ctx.restore(); }
+      function drawNPC(px, py, frame, flip, jacket, pants) { const ox = px | 0, oy = py | 0; const W = NPC_W, H = NPC_H; ctx.save(); if (flip) { ctx.translate(ox + W, oy); ctx.scale(-1, 1); } else ctx.translate(ox, oy); rect(2, H - 3, 12, 2, P.shadow); rect(4, 5, 10, 8, jacket); rect(6, 6, 6, 3, '#f1d6c2'); rect(6, 5, 6, 1, '#2a1c1a'); rect(7, 7, 1, 1, '#0b0b0b'); rect(10, 7, 1, 1, '#0b0b0b'); if (frame === 0) { rect(6, 13, 3, 6, pants); rect(9, 13, 3, 6, pants); } else if (frame === 1) { rect(5, 13, 3, 6, pants); rect(10, 13, 3, 6, pants); } else { rect(7, 13, 3, 6, pants); rect(9, 13, 3, 6, pants); } ctx.restore(); }
+      function bubble(x, y, text) { ctx.save(); ctx.font = '10px ui-monospace, monospace'; const pad = 6; const m = ctx.measureText(text); const bw = Math.max(56, m.width + pad * 2), bh = 22; const bx = Math.max(6, Math.min(x - bw / 2, canvas.clientWidth - bw - 6)); const by = Math.max(6, y - 30); rect(bx, by, bw, bh, P.speech); ctx.strokeStyle = P.speechEdge; ctx.strokeRect(bx + .5, by + .5, bw - 1, bh - 1); ctx.fillStyle = '#fff'; ctx.fillText(text, bx + pad, by + 14); ctx.beginPath(); ctx.moveTo(x, by + bh); ctx.lineTo(x - 4, by + bh); ctx.lineTo(x, by + bh + 6); ctx.closePath(); ctx.fillStyle = P.speech; ctx.fill(); ctx.strokeStyle = P.speechEdge; ctx.stroke(); ctx.restore(); }
 
-      function drawTrees() {
-        for (const canopy of trees) {
-          for (const leaf of canopy) {
-            const { x, y, r } = leaf;
-            const g = ctx.createRadialGradient(x, y, r * 0.2, x + 2, y + 1, r);
-            g.addColorStop(0, P.treeLeafB);
-            g.addColorStop(1, P.treeLeafA);
-            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-          }
-          for (const s of solids) { if (s.tree) { rect(s.x, s.y, s.w, s.h, P.trunk); } }
-        }
-      }
-
-      function roundRect(x, y, w, h, r, fill, stroke) {
-        const rr = Math.min(r, w / 2, h / 2);
-        ctx.beginPath();
-        ctx.moveTo(x + rr, y); ctx.arcTo(x + w, y, x + w, y + h, rr); ctx.arcTo(x + w, y + h, x, y + h, rr);
-        ctx.arcTo(x, y + h, x, y, rr); ctx.arcTo(x, y, x + w, y, rr);
-        if (fill) ctx.fill(); if (stroke) ctx.stroke();
-      }
-
-      function drawDev(px, py, frame = 0, flip = false) {
-        const ox = px | 0, oy = py | 0; ctx.save(); if (flip) { ctx.translate(ox + DEV_W, oy); ctx.scale(-1, 1); } else ctx.translate(ox, oy);
-        rect(2, DEV_H - 3, 16, 2, P.shadow);
-        rect(4, 6, 12, 9, P.devHood); rect(4, 10, 12, 1, P.devShade);
-        rect(7, 7, 6, 4, P.devSkin); rect(7, 6, 6, 1, P.hair); rect(8, 8, 1, 1, P.eye); rect(11, 8, 1, 1, P.eye); if (((Date.now() / 800 | 0) % 3) !== 0) rect(9, 10, 2, 1, P.eye);
-        if (frame === 0) { rect(6, 14, 3, 7, P.jean); rect(9, 14, 3, 7, P.jean); } else if (frame === 1) { rect(5, 14, 3, 7, P.jean); rect(10, 14, 3, 7, P.jean); } else { rect(7, 14, 3, 7, P.jean); rect(9, 14, 3, 7, P.jean); } rect(6, 21, 3, 1, P.shoe); rect(9, 21, 3, 1, P.shoe);
-        rect(2, 13, 4, 5, P.bag); rect(2, 18, 4, 1, P.bagEdge);
-        ctx.restore();
-      }
-
-      function drawNPC(px, py, frame, flip, jacket, pants) {
-        const ox = px | 0, oy = py | 0; const W = NPC_W, H = NPC_H; ctx.save(); if (flip) { ctx.translate(ox + W, oy); ctx.scale(-1, 1); } else ctx.translate(ox, oy);
-        rect(2, H - 3, 12, 2, P.shadow); rect(4, 5, 10, 8, jacket); rect(6, 6, 6, 3, '#f1d6c2'); rect(6, 5, 6, 1, '#2a1c1a'); rect(7, 7, 1, 1, '#0b0b0b'); rect(10, 7, 1, 1, '#0b0b0b');
-        if (frame === 0) { rect(6, 13, 3, 6, pants); rect(9, 13, 3, 6, pants); } else if (frame === 1) { rect(5, 13, 3, 6, pants); rect(10, 13, 3, 6, pants); } else { rect(7, 13, 3, 6, pants); rect(9, 13, 3, 6, pants); }
-        ctx.restore();
-      }
-
-      function bubble(x, y, text) {
-        ctx.save(); ctx.font = '10px ui-monospace, monospace'; const pad = 6; const m = ctx.measureText(text);
-        const bw = Math.max(56, m.width + pad * 2), bh = 22; const bx = Math.max(6, Math.min(x - bw / 2, canvas.clientWidth - bw - 6)); const by = Math.max(6, y - 30);
-        rect(bx, by, bw, bh, P.speech); ctx.strokeStyle = P.speechEdge; ctx.strokeRect(bx + .5, by + .5, bw - 1, bh - 1);
-        ctx.fillStyle = '#fff'; ctx.fillText(text, bx + pad, by + 14);
-        ctx.beginPath(); ctx.moveTo(x, by + bh); ctx.lineTo(x - 4, by + bh); ctx.lineTo(x, by + bh + 6); ctx.closePath(); ctx.fillStyle = P.speech; ctx.fill(); ctx.strokeStyle = P.speechEdge; ctx.stroke();
-        ctx.restore();
-      }
-
-      // ===== Random rug-reasons =====
+      // ===== Rug Lines with rarity (Rug Book) =====
       const RUG_LINES = [
-        "brb, bridging funds",
-        "audit in progress (self-audit)",
-        "AMA starting… in another chain",
-        "gas too high, gotta go",
-        "keys in cold wallet… in another country",
-        "chart needs me to step away",
-        "locking liquidity (my pocket)",
-        "dev multi-sig (1/1)",
-        "urgent governance vote (me vs me)",
-        "RPC down, spirit up",
-        "deploying v2 (v0.5)",
-        "tax set to 0… and me to 100",
-        "sec dm’ed brb",
-        "snapshot happening (my bank app)",
-        "meme first, product later",
-        "oops, wrong chain again",
-        "investor call (mom)",
-        "airdrop whitelist (friends only)",
-        "partnership secured (trust me bro)",
-        "audit passed (because we skipped it)"
+        // common
+        { id: 'c1', t: 'brb, bridging funds', r: 'common' },
+        { id: 'c2', t: 'audit in progress (self-audit)', r: 'common' },
+        { id: 'c3', t: 'AMA starting… in another chain', r: 'common' },
+        { id: 'c4', t: 'gas too high, gotta go', r: 'common' },
+        { id: 'c5', t: 'keys in cold wallet… in another country', r: 'common' },
+        { id: 'c6', t: 'chart needs me to step away', r: 'common' },
+        { id: 'c7', t: 'locking liquidity (my pocket)', r: 'common' },
+        { id: 'c8', t: 'dev multi-sig (1/1)', r: 'common' },
+        { id: 'c9', t: 'urgent governance vote (me vs me)', r: 'common' },
+        { id: 'c10', t: 'RPC down, spirit up', r: 'common' },
+        { id: 'c11', t: 'deploying v2 (v0.5)', r: 'common' },
+        { id: 'c12', t: 'tax set to 0… and me to 100', r: 'common' },
+        { id: 'c13', t: 'sec dm’ed brb', r: 'common' },
+        { id: 'c14', t: 'snapshot happening (my bank app)', r: 'common' },
+        { id: 'c15', t: 'meme first, product later', r: 'common' },
+        { id: 'c16', t: 'oops, wrong chain again', r: 'common' },
+        { id: 'c17', t: 'investor call (mom)', r: 'common' },
+        { id: 'c18', t: 'airdrop whitelist (friends only)', r: 'common' },
+        { id: 'c19', t: 'partnership secured (trust me bro)', r: 'common' },
+        { id: 'c20', t: 'audit passed (because we skipped it)', r: 'common' },
+        // uncommon
+        { id: 'u1', t: 'LP migrated to a safer place (mine)', r: 'uncommon' },
+        { id: 'u2', t: 'Docs under maintenance since Q2 2021', r: 'uncommon' },
+        { id: 'u3', t: 'We’re pre-revenue, post-liquidity', r: 'uncommon' },
+        { id: 'u4', t: 'Reorg on my schedule', r: 'uncommon' },
+        { id: 'u5', t: 'Bug bounty? I’m the bug', r: 'uncommon' },
+        { id: 'u6', t: 'Roadmap moved to Google Docs (private)', r: 'uncommon' },
+        { id: 'u7', t: 'Legal said “gtg” (my cousin)', r: 'uncommon' },
+        { id: 'u8', t: 'Vesting cliff? Fell off it', r: 'uncommon' },
+        { id: 'u9', t: 'KPIs met: Keep Pocketing Instantly', r: 'uncommon' },
+        { id: 'u10', t: 'Community multisig: 1 signer found', r: 'uncommon' },
+        // rare
+        { id: 'r1', t: 'DePinning my conscience', r: 'rare' },
+        { id: 'r2', t: 'CeDeFi’d your DeFi', r: 'rare' },
+        { id: 'r3', t: 'Bridged to Layer -1', r: 'rare' },
+        { id: 'r4', t: 'Proof of Absence activated', r: 'rare' },
+        { id: 'r5', t: 'Whitepaper is now a haiku', r: 'rare' }
+      ];
+      const WEIGHTS = { common: 6, uncommon: 3, rare: 1 };
+      const weightedPool = RUG_LINES.flatMap((e) => Array(WEIGHTS[e.r]).fill(e.id));
+      function pickRugLine() { const id = weightedPool[(Math.random() * weightedPool.length) | 0]; return RUG_LINES.find(e => e.id === id); }
+
+      // ===== NPC Heckle Lines =====
+      const NPC_HECKLE = [
+        "Dev, return the LP.", "Ship or sip, bro?", "Roadmap is vibes.", "Touch grass, dev.", "Multi-sig of one?", "Bridge? Burned it.", "We’re the exit?", "Audit when?", "GM. Build now.", "Chart needs CPR.", "Docs are 404.", "Liquidity hostage.", "Stop bridging, start shipping.", "Trust me… no.", "Dev, where code?", "V2 == vapor.", "Stop rug cardio.", "Refund the cope.", "Feature: vanishing act.", "Dev sprinted IRL."
       ];
 
-      // ===== Game Loop =====
-      let lastTS = performance.now();
-      let devFoundAnim = 0; // ms of dash
+      // Rug Book modal
+      function openBook() { document.getElementById('bookModal').style.display = 'flex'; renderBook(); }
+      function closeBook() { document.getElementById('bookModal').style.display = 'none'; }
+      function renderBook() { const wrap = document.getElementById('bookGrid'); wrap.innerHTML = ''; for (const e of RUG_LINES) { const got = !!save.book[e.id]; const el = document.createElement('div'); el.className = 'cell' + (got ? '' : ' locked'); const color = e.r === 'rare' ? '#c770ff' : e.r === 'uncommon' ? '#58b2ff' : '#7bdc86'; el.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px"><div style="color:${color}">[${e.r}]</div><div style="color:${got ? '#1fd57c' : '#9aa0a6'}">${got ? 'Collected' : 'Missing'}</div></div><div style="margin-top:6px">${got ? e.t : '— — —'}</div>`; wrap.appendChild(el); } updateHUD(); }
 
+      // ===== Game Loop =====
+      let lastTS = performance.now(); let devFoundAnim = 0;
       function step(ts) {
         const dt = Math.min(50, ts - lastTS); lastTS = ts;
 
-        // Update NPCs
+        // Update NPCs (panic & speech timers)
         for (const n of npcs) {
           n.nextF -= dt; if (n.nextF <= 0) { n.nextF = 120 + rng() * 120; n.frame = (n.frame + 1) % 3; }
-          let nx = n.x + (n.vx * dt / 1000), ny = n.y + (n.vy * dt / 1000);
+          if (n.sayT > 0) n.sayT -= dt;
+          let speedMul = n.panicT > 0 ? 1.2 : 1.0;
+          if (n.panicT > 0) { n.panicT -= dt; }
+          let nx = n.x + (n.vx * speedMul * dt / 1000), ny = n.y + (n.vy * speedMul * dt / 1000);
           const r = { x: nx, y: ny, w: n.w, h: n.h };
           if (nx < 0 || nx + n.w > canvas.clientWidth || solids.some(s => rectsOverlap(r, s))) n.vx *= -1;
           if (ny < 0 || ny + n.h > canvas.clientHeight || solids.some(s => rectsOverlap(r, s))) n.vy *= -1;
-          n.x += n.vx * dt / 1000; n.y += n.vy * dt / 1000; n.dir = n.vx < 0 ? -1 : 1;
+          n.x += n.vx * speedMul * dt / 1000; n.y += n.vy * speedMul * dt / 1000; n.dir = n.vx < 0 ? -1 : 1;
         }
 
         // Dev idle / dash
-        if (dev.hiding) {
-          dev.nextF -= dt; if (dev.nextF <= 0) { dev.nextF = 150 + rng() * 150; dev.frame = (dev.frame + 1) % 3; }
-          dev.x += Math.sin(ts / 700 + seed) * 0.02; dev.y += Math.cos(ts / 900 + seed) * 0.02;
-        } else if (devFoundAnim > 0) {
-          devFoundAnim -= dt; dev.x += dev.dir * 0.35 * dt; dev.y -= 0.15 * dt;
-        }
+        if (dev.hiding) { dev.nextF -= dt; if (dev.nextF <= 0) { dev.nextF = 150 + rng() * 150; dev.frame = (dev.frame + 1) % 3; } dev.x += Math.sin(ts / 700 + seed) * 0.02; dev.y += Math.cos(ts / 900 + seed) * 0.02; }
+        else if (devFoundAnim > 0) { devFoundAnim -= dt; dev.x += dev.dir * 0.35 * dt; dev.y -= 0.15 * dt; }
 
-        // Render layers
-        drawFieldTexture();
+        // Render
+        if (fieldCache) ctx.drawImage(fieldCache, 0, 0);
         drawTrees();
-        // REMOVED: drawPonds()
-
-        for (const n of npcs) { drawNPC(n.x, n.y, n.frame, n.dir < 0, n.jacket, n.pants); }
+        for (const n of npcs) { drawNPC(n.x, n.y, n.frame, n.dir < 0, n.jacket, n.pants); if (n.sayT > 0 && n.say) { bubble(n.x + NPC_W / 2, n.y - 6, n.say); } }
+        for (const d of decoys) { drawDecoy(d); }
         drawDev(dev.x, dev.y, dev.frame, dev.dir < 0);
-
-        // Draw bubble at anchored position if present
-        if (dev.say && bubblePos) { bubble(bubblePos.x, bubblePos.y, dev.say); }
 
         requestAnimationFrame(step);
       }
 
+      function drawDecoy(d) { const ox = d.x | 0, oy = d.y | 0; ctx.save(); if (d.dir < 0) { ctx.translate(ox + DEV_W, oy); ctx.scale(-1, 1); } else ctx.translate(ox, oy); rect(2, DEV_H - 3, 16, 2, P.shadow); rect(4, 6, 12, 9, '#14b86c'); rect(4, 10, 12, 1, '#0f8e58'); rect(7, 7, 6, 4, '#eec9ac'); rect(7, 6, 6, 1, '#2a1c1a'); rect(8, 8, 1, 1, '#0b0b0b'); rect(11, 8, 1, 1, '#0b0b0b'); if (d.frame === 0) { rect(6, 14, 3, 7, '#2458a9'); rect(9, 14, 3, 7, '#2458a9'); } else if (d.frame === 1) { rect(5, 14, 3, 7, '#2458a9'); rect(10, 14, 3, 7, '#2458a9'); } else { rect(7, 14, 3, 7, '#2458a9'); rect(9, 14, 3, 7, '#2458a9'); } rect(6, 21, 3, 1, P.shoe); rect(9, 21, 3, 1, P.shoe); ctx.restore(); }
+
       // ===== Input =====
-      canvas.addEventListener('click', (e) => {
-        const rectC = canvas.getBoundingClientRect();
-        const x = (e.clientX - rectC.left); const y = (e.clientY - rectC.top);
-        if (x >= dev.x && x <= dev.x + dev.w && y >= dev.y && y <= dev.y + dev.h) {
-          const t = performance.now() - dev.spawnedAt; last = t; if (best == null || t < best) best = t; finds++; updateHUD();
-          dev.hiding = false; dev.say = RUG_LINES[(Math.random() * RUG_LINES.length) | 0]; devFoundAnim = 650; dev.dir = (rng() < 0.5 ? -1 : 1);
-          // Anchor bubble to the position at click-time (static while he runs)
-          bubblePos = { x: dev.x + DEV_W / 2, y: dev.y - 4 };
-          setTimeout(() => { dev.say = ''; bubblePos = null; spawnDev(); spawnCrowd(); }, 700);
+      canvas.addEventListener('click', (e) => { const rectC = canvas.getBoundingClientRect(); const x = (e.clientX - rectC.left), y = (e.clientY - rectC.top); const p = { x, y }; if (hit(p, dev)) return onDevClick(); for (const d of decoys) { if (hit(p, d)) { onDecoyClick(d); return; } } misclicksRound++; });
+      function hit(p, obj) { return (p.x >= obj.x - 2 && p.x <= obj.x + obj.w + 2 && p.y >= obj.y - 2 && p.y <= obj.y + obj.h + 2); }
+
+      function onDecoyClick(d) { save.decoyClicks++; persist(); penaltyAcc += 500; const r = freeRect(DEV_W, DEV_H); Object.assign(d, { x: r.x, y: r.y, dir: rng() < .5 ? -1 : 1 }); }
+
+      function onDevClick() {
+        const tRaw = performance.now() - dev.spawnedAt; const t = tRaw + penaltyAcc; last = t; if (best == null || t < best) best = t; finds++;
+        if (t < 2000) { streakComb++; } else streakComb = 0; mult = 1 + Math.min(2, Math.floor(streakComb / 3) * 0.5); // 1.0..3.0
+        let points = mult; if (dev.bounty) { points *= 10; save.meta.bounty[dayKey] = true; toast('Gold Bounty caught! ×10'); }
+        score = Math.round(score + points);
+
+        // Rug Book collection; show DEV line as POPUP (not a bubble)
+        const entry = pickRugLine();
+        showDevPopup(entry.t);            // <-- popup for 2s
+        dev.say = '';                     // ensure no bubble for DEV
+        bubblePos = null;
+        save.book[entry.id] = true; persist(); renderBook();
+
+        // Trigger NPC heckles + panic
+        npcHeckleAndPanic();
+
+        updateHUD();
+        dev.hiding = false; devFoundAnim = 650; dev.dir = (rng() < 0.5 ? -1 : 1);
+        setTimeout(() => { spawnDev(); spawnCrowd(); buildDecoys(); }, 700);
+      }
+
+      function npcHeckleAndPanic() {
+        const N = npcs.length;
+        if (!N) return;
+        const count = Math.min(12, Math.max(5, (N * 0.08) | 0));
+        for (let i = 0; i < count; i++) {
+          const n = npcs[(Math.random() * N) | 0];
+          n.say = NPC_HECKLE[(Math.random() * NPC_HECKLE.length) | 0];
+          n.sayT = 1200 + Math.random() * 400;
+          n.panicT = 800 + Math.random() * 400;
+          const s = 60 + Math.random() * 120;
+          const a = Math.random() * Math.PI * 2;
+          n.vx = Math.cos(a) * s; n.vy = Math.sin(a) * s;
         }
-      });
+      }
 
-      // ===== Boot =====
-      resize(); updateHUD();
-      requestAnimationFrame(step);
+      // ===== DEV Popup helpers =====
+      function showDevPopup(text) {
+        try { if (navigator.vibrate) navigator.vibrate(15); } catch { }
+        devPopEl.textContent = text;
+        devPopEl.classList.add('show');
+        clearTimeout(devPopTimer);
+        devPopTimer = setTimeout(() => { devPopEl.classList.remove('show'); }, 2000); // 2s visible
+      }
 
+      function hardReset() { finds = 0; best = null; last = null; score = 0; streakComb = 0; mult = 1.0; penaltyAcc = 0; misclicksRound = 0; save = { badges: {}, decoyClicks: 0, book: {}, meta: { lastPlayed: dayKey, streak: 1, bounty: {} } }; persist(); updateHUD(); spawnDev(); spawnCrowd(); buildDecoys(); toast('Reset'); }
+
+      // ===== Share =====
+      function doShare() { try { const off = document.createElement('canvas'); off.width = canvas.width; off.height = canvas.height; const oc = off.getContext('2d'); oc.drawImage(canvas, 0, 0); oc.setTransform(DPR, 0, 0, DPR, 0, 0); oc.font = 'bold 14px ui-monospace, monospace'; oc.fillStyle = '#ffffff'; const btxt = save.meta.bounty[dayKey] ? '• BOUNTY' : ''; oc.fillText(`Find #${finds} • ${last ? formatMs(last) : '—'} • x${mult.toFixed(1)} ${btxt}`, 12, 22); oc.fillText(`RugBook ${Object.keys(save.book).length}/${RUG_LINES.length} • Seed ${dayKey}`, 12, 40); const data = off.toDataURL('image/png'); const tweet = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`I found the Dev in ${last ? formatMs(last) : '—'} (x${mult.toFixed(1)}) ${save.meta.bounty[dayKey] ? 'BOUNTY 🎯' : ''} #WheresDev`)}&url=${encodeURIComponent(location.href)}`; window.open(tweet, '_blank'); const a = document.createElement('a'); a.href = data; a.download = `wheres-dev-${Date.now()}.png`; a.click(); } catch (err) { console.error(err); toast('Share failed'); } }
+
+      // ===== Toast =====
+      function toast(msg) { const n = document.getElementById('notice'); const prev = n.innerHTML; n.textContent = msg; setTimeout(() => { n.innerHTML = prev; }, 1400); }
+
+      function persist() { localStorage.setItem(SAVEKEY, JSON.stringify(save)); }
+
+      // ===== Boot + quick checks =====
+      function runSelfTests() { try { console.assert(Array.isArray(solids), 'solids array exists'); console.assert(Array.isArray(trees), 'trees array exists'); console.assert(RUG_LINES.length >= 30, 'RugBook entries ok'); console.assert(NPC_HECKLE.length >= 10, 'NPC heckles ok'); } catch (e) { console.error('Self-tests failed', e); } }
+
+      // utilities used above
+      function lerp(a, b, t) { return a + (b - a) * t; } function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; } function rgbToHex(r, g, b) { return '#' + [r, g, b].map(v => ('0' + (v | 0).toString(16)).slice(-2)).join(''); }
+
+      resize(); updateHUD(); renderBook(); requestAnimationFrame(step); runSelfTests();
     })();
   </script>
 </body>
 
-
 </html>
-
