@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Where Dev - The Game</title>
+  <title>Where’s Dev?</title>
   <style>
     :root {
       --bg: #0a0a0b;
@@ -205,6 +205,36 @@
         font-size: 13px
       }
     }
+
+    /* HUD toggle button */
+    .hud-toggle {
+      position: fixed;
+      inset: 160px auto auto 12px;
+      /* same corner as HUD */
+      z-index: 6;
+      /* above canvas, below modal */
+      background: #0f1113;
+      color: #9aa0a6;
+      border: 1px solid #22262b;
+      border-radius: 10px;
+      padding: 6px 8px;
+      font: 12px ui-monospace, monospace;
+      opacity: .65;
+      cursor: pointer;
+      transition: opacity .15s ease, border-color .15s ease;
+    }
+
+    .hud-toggle:hover {
+      opacity: 1;
+      border-color: #2f343b;
+      color: #e8e8ea;
+    }
+
+    /* Hidden HUD state: invisible + click-through */
+    .hud.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
   </style>
 </head>
 
@@ -229,9 +259,12 @@
     <button id="bookBtn">Rug Book</button>
     <button id="reset">Reset</button>
   </div>
+  <button id="hudToggle" class="hud-toggle" aria-pressed="false" title="Hide HUD (H)">HUD ☑</button>
+
 
   <canvas id="canvas"></canvas>
-  <div class="notice" id="notice">Find the green dev. Tip: he holds a bag. Today’s seed: <span id="seedtxt">—</span></div>
+  <div class="notice" id="notice">Find the green dev. Tip: he holds a bag. Today’s seed: <span id="seedtxt">—</span>
+  </div>
 
   <!-- DEV popup (replaces DEV speech bubble) -->
   <div id="devPop" class="devpop" role="status" aria-live="polite"></div>
@@ -411,6 +444,29 @@
       const NPC_HECKLE = [
         "Dev, return the LP.", "Ship or sip, bro?", "Roadmap is vibes.", "Touch grass, dev.", "Multi-sig of one?", "Bridge? Burned it.", "We’re the exit?", "Audit when?", "GM. Build now.", "Chart needs CPR.", "Docs are 404.", "Liquidity hostage.", "Stop bridging, start shipping.", "Trust me… no.", "Dev, where code?", "V2 == vapor.", "Stop rug cardio.", "Refund the cope.", "Feature: vanishing act.", "Dev sprinted IRL."
       ];
+      // HUD toggle (button + hotkey + persistence)
+      const hud = document.querySelector('.hud');
+      const hudToggle = document.getElementById('hudToggle');
+      const HUD_KEY = 'wd_hud_hidden';
+
+      function setHudHidden(v) {
+        hud.classList.toggle('hidden', v);
+        hudToggle.setAttribute('aria-pressed', String(v));
+        hudToggle.textContent = v ? 'HUD ◻' : 'HUD ☑';
+        localStorage.setItem(HUD_KEY, v ? '1' : '0');
+      }
+
+      // Init from storage
+      setHudHidden(localStorage.getItem(HUD_KEY) === '1');
+
+      // Click + keyboard (H) to toggle
+      hudToggle.onclick = () => setHudHidden(!hud.classList.contains('hidden'));
+      window.addEventListener('keydown', (e) => {
+        if ((e.key === 'h' || e.key === 'H') && !e.repeat) {
+          setHudHidden(!hud.classList.contains('hidden'));
+        }
+      });
+
 
       // Rug Book modal
       function openBook() { document.getElementById('bookModal').style.display = 'flex'; renderBook(); }
@@ -524,5 +580,3 @@
 </body>
 
 </html>
-
-
